@@ -324,6 +324,8 @@ void initialize()
 int main(void)
 {
 
+    int KEY_value;
+
     volatile int *red_LED_ptr = (int *)LED_BASE;
     volatile int *audio_ptr = (int *)AUDIO_BASE;
     /* used for audio record/playback */
@@ -339,14 +341,22 @@ int main(void)
     { // Main Application loop
 
         initialize(); // reset the system first
-        display_minutes();
+
         key_pressed = getPressedKeys(); // check which key is pressed
+        KEY_value = *(key_ptr);         // read the pushbutton KEY values
 
     RESET:
-        if (key_pressed & 0x1)
+        if (KEY_value == 0x1)
         { // start the counter when button 1 is pressed
+          // reset counter to start recording
+            buffer_index = 0;
+            // clear audio-in FIFO
+            *(audio_ptr) = 0x4;
+            *(audio_ptr) = 0x0;
+            record = 1;
             initialize();
-            while (1)
+            display_minutes();
+            while (record)
             {
                 key_pressed = getPressedKeys(); // check if other keys are pressed
 
@@ -358,6 +368,7 @@ int main(void)
                     *(audio_ptr + 1);                         // read the audio port fifospace register
                 if ((fifospace & 0x000000FF) > BUF_THRESHOLD) // check RARC
                 {
+                    KEY_value = *(key_ptr); // read the pushbutton KEY values
                     // store data until the the audio-in FIFO is empty or the buffer
                     // is full
                     while ((fifospace & 0x000000FF) && (buffer_index < BUF_SIZE))
@@ -365,57 +376,68 @@ int main(void)
                         left_buffer[buffer_index] = *(audio_ptr + 2);
                         right_buffer[buffer_index] = *(audio_ptr + 3);
                         ++buffer_index;
-                        if (buffer_index == BUF_SIZE)
+                        if (buffer_index == BUF_SIZE || KEY_value != 0x1)
                         { // done recording
                             record = 0;
                             *(red_LED_ptr) = 0x0; // turn off LEDR
+                            split_timer_capture();
                         }
                         fifospace = *(audio_ptr +
                                       1); // read the audio port fifospace register
                     }
-                    split_timer_capture();
                 }
-                if (key_pressed & 2) // button 2 is pressed
+            }
+            split_timer_display();
+        }
+        else if (KEY_value == 0x2) // button 2 is pressed
+        {
+            // reset counter to start recording
+            buffer_index = 0;
+            // clear audio-in FIFO
+            *(audio_ptr) = 0x8;
+            *(audio_ptr) = 0x0;
+            play = 1;
+            milli_seconds = 0; // reset milli seconds to zero
+            seconds = 0;       // reset the seconds to zero
+            minutes = 0;       // reset minutes to zero
+
+            display_minutes();
+            while (play)
+            {
+                start_timer();
+
+                *(red_LED_ptr) = 0x2; // turn on LEDR_1
+                fifospace =
+                    *(audio_ptr + 1);                         // read the audio port fifospace register
+                if ((fifospace & 0x00FF0000) > BUF_THRESHOLD) // check WSRC
                 {
-                    while (1)
+                    KEY_value = *(key_ptr);
+                    // output data until the buffer is empty or the audio-out FIFO
+                    // is full
+                    while ((fifospace & 0x00FF0000) && (buffer_index < BUF_SIZE))
                     {
-                        initialize();
-                        start_timer();
-
-                        if (split_m == minutes && split_s == seconds && split_ms == milli_seconds)
+                        *(audio_ptr + 2) = left_buffer[buffer_index];
+                        *(audio_ptr + 3) = right_buffer[buffer_index];
+                        ++buffer_index;
+                        if (buffer_index == BUF_SIZE || (minutes == split_m && seconds == split_s && milli_seconds == split_ms)|| KEY_value != 0x2)
                         {
-                            display_minutes();                               
-                            
-                        }
+                            // done playback
+                            play = 0;
+                            *(red_LED_ptr) = 0x0; // turn off LEDR
 
-                        key_pressed = getPressedKeys(); // check which key is pressed
-                        *(red_LED_ptr) = 0x2;           // turn on LEDR_1
-                        fifospace =
-                            *(audio_ptr + 1);                         // read the audio port fifospace register
-                        if ((fifospace & 0x00FF0000) > BUF_THRESHOLD) // check WSRC
-                        {
-                            // output data until the buffer is empty or the audio-out FIFO
-                            // is full
-                            while ((fifospace & 0x00FF0000) && (buffer_index < BUF_SIZE))
-                            {
-                                *(audio_ptr + 2) = left_buffer[buffer_index];
-                                *(audio_ptr + 3) = right_buffer[buffer_index];
-                                ++buffer_index;
-                                if (buffer_index == BUF_SIZE)
-                                {
-                                    // done playback
-                                    play = 0;
-                                    *(red_LED_ptr) = 0x0; // turn off LEDR
-                                }
-                                fifospace = *(audio_ptr +
-                                              1); // read the audio port fifospace register
-                            }
+                            KEY_value = 0;
+                            // reset time
+                            milli_seconds = 0;
+                            seconds = 0;
+                            minutes = 0;
+                            split_timer_display();
                         }
-
-                        
+                        fifospace = *(audio_ptr +
+                                      1); // read the audio port fifospace register
                     }
                 }
             }
+            
         }
     }
 }
