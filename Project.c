@@ -266,7 +266,7 @@ void count_up()
             minutes = 0;                // reset minutes
             seconds = 0;                // reset seconds
             milli_seconds = 0;          // reset milli seconds
-            intialize_timer(225000000); // reset time load value to count for one second
+            intialize_timer(100000000); // reset time load value to count for one second
         }
     }
 }
@@ -314,7 +314,7 @@ void initialize()
     // reset the digits
     *(hex1_ptr) = 0;
     *(hex2_ptr) = 0;
-    intialize_timer(2250000); // set the load value in A9 private timer to count in milliseconds
+    intialize_timer(1000000); // set the load value in A9 private timer to count in milliseconds
     key_pressed = 0;          // set the pressed key state to zero
     milli_seconds = 0;        // reset milli seconds to zero
     seconds = 0;              // reset the seconds to zero
